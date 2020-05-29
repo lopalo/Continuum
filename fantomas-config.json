@@ -1,0 +1,7 @@
+{
+  "PageWidth":80,
+  "SpaceBeforeColon": true,
+  "SpaceAroundDelimiter": false,
+  "KeepNewlineAfter": true,
+  "StrictMode": false
+}

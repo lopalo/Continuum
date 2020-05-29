@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Util.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Message.fs" />
+    <Compile Include="Tcp.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PeterO.Cbor" Version="4.1.2" />
+  </ItemGroup>
+
+</Project>
