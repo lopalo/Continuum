@@ -11,12 +11,10 @@ let getField (cborObject : Cbor) (fieldName : string) =
     | null -> sprintf "Field '%s' doesn't exist" fieldName |> failwith
     | item -> item
 
-let iterator (cborObject : Cbor) =
-    cborObject.Values.GetEnumerator()
+let iterator (cborObject : Cbor) = cborObject.Values.GetEnumerator()
 
 let next (iterator : Collections.Generic.IEnumerator<_>) =
     iterator.MoveNext() |> ignore
     iterator.Current
 
-let generateBase64Guid() =
-    Convert.ToBase64String(Guid.NewGuid().ToByteArray())
+let generateBase64Guid() = Convert.ToBase64String(Guid.NewGuid().ToByteArray())

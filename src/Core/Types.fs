@@ -4,6 +4,7 @@ module U = Continuum.Core.Util
 
 type Cbor = PeterO.Cbor.CBORObject
 
+[<Struct>]
 type NodeId = NodeId of string
 
 module NodeId =
@@ -11,9 +12,10 @@ module NodeId =
 
     let fromCbor (o : Cbor) = o.AsString() |> NodeId
 
+[<Struct>]
 type ObjectId =
-    | Object of string
-    | Client of string
+    | Object of objectId : string
+    | Client of clientId : string
 
 module ObjectId =
     let toCbor msg =
@@ -32,6 +34,7 @@ module ObjectId =
         | "Client" -> Client v
         | tag -> U.unknownTagError tag
 
+[<Struct>]
 type EntityId =
     {NodeId : NodeId
      ObjectId : ObjectId}
@@ -45,6 +48,7 @@ module EntityId =
         {NodeId = NodeId.fromCbor (U.getField o "nodeId")
          ObjectId = ObjectId.fromCbor (U.getField o "objectId")}
 
+[<Struct>]
 type Label = Label of string
 
 module Label =
@@ -52,6 +56,8 @@ module Label =
 
     let fromCbor (o : Cbor) = o.AsString() |> Label
 
+[<Struct>]
+[<StructuredFormatDisplay("({X} {Y})")>]
 type Position =
     {X : float
      Y : float}
@@ -64,6 +70,7 @@ module Position =
         {X = (U.next i).AsDouble()
          Y = (U.next i).AsDouble()}
 
+[<Struct>]
 type Speed =
     {DX : float
      DY : float}
@@ -74,3 +81,8 @@ module Speed =
     let fromCbor o =
         {DX = (U.getField o "dx").AsDouble()
          DY = (U.getField o "dy").AsDouble()}
+
+[<Literal>]
+let private ConfigSamplePath = __SOURCE_DIRECTORY__ + "/config-sample.json"
+
+type Config = FSharp.Data.JsonProvider<ConfigSamplePath>

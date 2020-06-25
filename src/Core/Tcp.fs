@@ -3,6 +3,7 @@ module Continuum.Core.Tcp
 open System
 open System.Net
 open System.Net.Sockets
+open Serilog
 
 type NetSocket = Socket
 
@@ -12,39 +13,47 @@ type Socket =
              Mutex : Threading.SemaphoreSlim}
 
 
-let startServer (ipAddress : IPAddress) (port : int) socketHandler =
+let startServer (endpoint : IPEndPoint) socketHandler =
     async {
-        let endpoint = IPEndPoint(ipAddress, port)
         let server =
             new NetSocket(AddressFamily.InterNetwork, SocketType.Stream,
                           ProtocolType.Tcp)
         server.Bind(endpoint)
         server.Listen(1024)
-        printfn "Started listening on %A:%i" ipAddress port
+        Log.Information
+            ("TCP server started listening on {0}:{1}", endpoint.Address,
+             endpoint.Port)
         let rec loop() =
             async {
                 let! socket = SocketTaskExtensions.AcceptAsync(server)
                               |> Async.AwaitTask
                 let mutex = new Threading.SemaphoreSlim(1, 1)
-                socketHandler
-                    {RemoteEndPoint = socket.RemoteEndPoint :?> IPEndPoint
-                     NetSocket = socket
-                     Mutex = mutex}
+
+                do! socketHandler
+                        {RemoteEndPoint = socket.RemoteEndPoint :?> IPEndPoint
+                         NetSocket = socket
+                         Mutex = mutex}
+                    |> Async.StartChild
+                    |> Async.Ignore
                 return! loop()
             }
         return! loop()
     }
 
+let private makeNetSocket() =
+    new NetSocket(AddressFamily.InterNetwork, SocketType.Stream,
+                  ProtocolType.Tcp)
 
 let private connect (endpoint : IPEndPoint) =
     async {
-        let socket =
-            new NetSocket(AddressFamily.InterNetwork, SocketType.Stream,
-                          ProtocolType.Tcp)
+        let socket = makeNetSocket()
         try
             do! SocketTaskExtensions.ConnectAsync
                     (socket, (endpoint :> EndPoint)) |> Async.AwaitTask
-            printfn "Connected to %A:%i" endpoint.Address endpoint.Port
+
+            Log.Debug
+                ("TCP client connected to {0}:{1}", endpoint.Address,
+                 endpoint.Port)
         with :? AggregateException as e ->
             match e.GetBaseException() with
             | :? SocketException as e' ->
@@ -106,26 +115,27 @@ let writeFrame socket frame =
             mutex.Release() |> ignore
     }
 
-let private ensureConnection ({RemoteEndPoint = rep; NetSocket = s} as socket) =
-    async {
-        if not s.Connected then
-            let! netSocket = connect rep
-            socket.NetSocket <- netSocket
-    }
 
-let writeFrameWithReconnection socket frame =
+let close {NetSocket = s} = s.Close 0
+
+let ensureConnection socket =
     let mutex = socket.Mutex
     async {
         do! mutex.WaitAsync() |> Async.AwaitTask
         try
-            do! ensureConnection socket
-            do! doWriteFrame socket.NetSocket frame
+            if not socket.NetSocket.Connected then
+                close socket
+                let! netSocket = connect socket.RemoteEndPoint
+                socket.NetSocket <- netSocket
         finally
             mutex.Release() |> ignore
     }
 
-let checkConnection socket =
-    writeFrameWithReconnection socket [||]
+let writeFrameWithReconnection socket frame =
+    async {
+        do! ensureConnection socket
+        do! doWriteFrame socket.NetSocket frame
+    }
 
 let private readExactly (socket : NetSocket) length =
     let buffer : byte [] = Array.zeroCreate length
@@ -137,11 +147,24 @@ let private readExactly (socket : NetSocket) length =
                 return Some buffer
             else
                 let segment = System.ArraySegment(buffer, offset, length)
-                let! read = SocketTaskExtensions.ReceiveAsync
-                                (socket, segment, flags) |> Async.AwaitTask
-                if read = 0
-                then return None
-                else return! loop (offset + read) (length - read)
+                try
+                    let! read = SocketTaskExtensions.ReceiveAsync
+                                    (socket, segment, flags) |> Async.AwaitTask
+                    if read = 0
+                    then return None
+                    else return! loop (offset + read) (length - read)
+                with
+                | :? AggregateException as e ->
+                    return match e.GetBaseException() with
+                           | :? SocketException as e' ->
+                               match e'.ErrorCode with
+                               //EPIPE, ECONNRESET, ENOTCONN
+                               | 32
+                               | 104
+                               | 107 -> None
+                               | _ -> raise e
+                           | _ -> raise e
+                | :? ObjectDisposedException -> return None
         }
     loop 0 length
 
@@ -167,14 +190,20 @@ let readFrames socket frameHandler =
         }
     loop()
 
-let close {NetSocket = s} = s.Close()
 
-let connectClient (ipAddress : IPAddress) (port : int) =
+let makeClient remoteEndpoint =
     async {
-        let endpoint = IPEndPoint(ipAddress, port)
-        let! netSocket = connect endpoint
+        let netSocket = makeNetSocket()
         let mutex = new Threading.SemaphoreSlim(1, 1)
-        return {RemoteEndPoint = endpoint
-                NetSocket = netSocket
-                Mutex = mutex}
+
+        let socket =
+            {RemoteEndPoint = remoteEndpoint
+             NetSocket = netSocket
+             Mutex = mutex}
+        do! ensureConnection socket
+            |> Async.StartChild
+            |> Async.Ignore
+        return socket
     }
+
+let remoteEndPoint {RemoteEndPoint = ep} = ep.Address, ep.Port

@@ -3,3 +3,4 @@ Session.vim
 /src/*/obj/*
 /src/*/bin/*
 /src/*/Signatures.fsi
+*.pid

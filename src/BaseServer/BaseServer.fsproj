@@ -10,7 +10,12 @@
 
     <Compile Include="Clients.fs" />
     <Compile Include="Common.fs" />
+    <Compile Include="BaseHandler.fs" />
     <Compile Include="ClientHandler.fs" />
     <Compile Include="Main.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.Sinks.Console" Version="3.0.0" />
   </ItemGroup>
 </Project>

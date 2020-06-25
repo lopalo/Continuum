@@ -1,0 +1,21 @@
+{
+    "topology": {
+        "baseNodes": [
+            {
+                "id": "foo",
+                "ipAddress": "127.0.0.1",
+                "clientPort": 8100,
+                "basePort": 8101
+            },
+            {
+                "id": "bar",
+                "ipAddress": "127.0.0.1",
+                "clientPort": 9100,
+                "basePort": 9101
+            }
+        ],
+        "zoneNodes": [
+        ]
+    },
+    "debug": true
+}

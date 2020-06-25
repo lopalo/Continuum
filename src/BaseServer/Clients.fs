@@ -1,7 +1,7 @@
 namespace Continuum.BaseServer
 
+open Serilog
 open Continuum.Core
-
 open Continuum.Core.Types
 
 type ClientId = private | ClientId of string
@@ -9,9 +9,16 @@ type ClientId = private | ClientId of string
 module ClientId =
     let toObjectId (ClientId id) = Client id
 
+    let fromObjectId =
+        function
+        | (Client id) -> Some(ClientId id)
+        | Object _ -> None
+
     let toEntityId nodeId clientId =
         {NodeId = nodeId
          ObjectId = toObjectId clientId}
+
+    let fromEntityId {ObjectId = oid} = fromObjectId oid
 
     let NewId() = Util.generateBase64Guid() |> ClientId
 
@@ -23,7 +30,7 @@ type Clients =
 
 
 module Clients =
-    let makeClients() =
+    let make() =
         let dummyDisconnectionHandler _clientId = ()
         let dummyMessageHandler _clientId _message = async {return ()}
         {DisconnectionHandler = dummyDisconnectionHandler
@@ -42,15 +49,26 @@ module Clients =
             Message.BaseClient.pack message |> Tcp.writeFrame socket
         | None -> async {return ()}
 
+    let broadcastMessage clients message =
+        let frame = Message.BaseClient.pack message
+        Map.toSeq clients.Sockets
+        |> Seq.map (fun (_, socket) -> Tcp.writeFrame socket frame)
+        |> Async.Parallel
+        |> Async.Ignore
+
     let socketHandler clients socket =
         let clientId = ClientId.NewId()
         let (ClientId cid) = clientId
-        clients.Sockets <- Map.add clientId socket clients.Sockets
-        printfn "Client '%s' connected" cid
+        lock clients
+            (fun () ->
+                clients.Sockets <- Map.add clientId socket clients.Sockets)
+        Log.Debug("Client '{0}' connected", cid)
         let cleanup() =
-            clients.Sockets <- Map.remove clientId clients.Sockets
+            lock clients
+                (fun () ->
+                    clients.Sockets <- Map.remove clientId clients.Sockets)
             Tcp.close socket
-            printfn "Client '%s' disconnected" cid
+            Log.Debug("Client '{0}' disconnected", cid)
 
         let rec loop() =
             async {
@@ -59,8 +77,7 @@ module Clients =
                     let msg = Message.ClientBase.unpack frame
                     do! clients.MessageHandler clientId msg
                     return! loop()
-                | None ->
-                    return ()
+                | None -> return ()
             }
 
         async {
@@ -71,6 +88,5 @@ module Clients =
                 finally
                     cleanup()
             with error ->
-                printfn "Error in client's message handler: \n%A" error
+                Log.Error("Error in client's message handler: \n%{0}", error)
         }
-        |> Async.Start
