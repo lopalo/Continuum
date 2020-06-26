@@ -5,7 +5,8 @@
                 "id": "base-1",
                 "ipAddress": "127.0.0.1",
                 "clientPort": 9000,
-                "basePort": 9001
+                "basePort": 9001,
+                "capacity": 1000
             }
         ],
         "zoneNodes": [

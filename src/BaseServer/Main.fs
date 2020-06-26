@@ -26,7 +26,7 @@ let main =
         let ipAddress = IPAddress.Parse(nodeConfig.IpAddress)
         let clientPort = nodeConfig.ClientPort
         let basePort = nodeConfig.BasePort
-        let clients = Clients.make()
+        let clients = Clients.make nodeConfig.Capacity
 
         let remoteBaseEndpoints =
             config.Topology.BaseNodes

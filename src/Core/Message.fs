@@ -70,6 +70,7 @@ module ObjectInfo =
 
 type BaseClient =
     | Connected
+    | Refused
     | Initialize of ObjectInfo
     | SetPosition of id : EntityId * position : Position
     | Ping of source : EntityId
@@ -82,13 +83,15 @@ module BaseClient =
         let tag =
             match msg with
             | Connected -> "Connected"
+            | Refused -> "Refused"
             | Initialize _ -> "Initialize"
             | SetPosition _ -> "SetPosition"
             | Ping _ -> "Ping"
             | Pong _ -> "Pong"
         m.Add("tag", tag) |> ignore
         match msg with
-        | Connected -> m
+        | Connected
+        | Refused -> m
         | Initialize info -> m.Add("info", ObjectInfo.toCbor info)
         | SetPosition(id, pos) ->
             m.Add("id", EntityId.toCbor id).Add("pos", Position.toCbor pos)
@@ -98,6 +101,7 @@ module BaseClient =
     let fromCbor o =
         match (U.getField o "tag").AsString() with
         | "Connected" -> Connected
+        | "Refused" -> Refused
         | "Initialize" ->
             U.getField o "info"
             |> ObjectInfo.fromCbor

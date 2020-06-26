@@ -24,16 +24,18 @@ module ClientId =
 
 
 type Clients =
-    private {mutable MessageHandler : ClientId -> Message.ClientBase -> Async<unit>
+    private {Capacity : int
+             mutable MessageHandler : ClientId -> Message.ClientBase -> Async<unit>
              mutable DisconnectionHandler : ClientId -> unit
              mutable Sockets : Map<ClientId, Tcp.Socket>}
 
 
 module Clients =
-    let make() =
+    let make capacity =
         let dummyDisconnectionHandler _clientId = ()
         let dummyMessageHandler _clientId _message = async {return ()}
-        {DisconnectionHandler = dummyDisconnectionHandler
+        {Capacity = capacity
+         DisconnectionHandler = dummyDisconnectionHandler
          MessageHandler = dummyMessageHandler
          Sockets = Map.empty}
 
@@ -56,7 +58,7 @@ module Clients =
         |> Async.Parallel
         |> Async.Ignore
 
-    let socketHandler clients socket =
+    let private initializeClient clients socket =
         let clientId = ClientId.NewId()
         let (ClientId cid) = clientId
         lock clients
@@ -90,3 +92,13 @@ module Clients =
             with error ->
                 Log.Error("Error in client's message handler: \n%{0}", error)
         }
+
+    let socketHandler clients socket =
+        if clients.Sockets.Count < clients.Capacity then
+            initializeClient clients socket
+        else
+            async {
+                //The client is supposed to close the connection once it receives the message
+                let msg = Message.BaseClient.Refused
+                do! Message.BaseClient.pack msg |> Tcp.writeFrame socket
+            }

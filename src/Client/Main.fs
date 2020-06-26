@@ -19,6 +19,7 @@ let frameHandler socket frame =
     printfn "Received message: %A" message
     match message with
     | M.BaseClient.Connected -> sendMessage socket M.Initialize
+    | M.BaseClient.Refused -> Tcp.close socket
     | M.BaseClient.Ping source -> sendMessage socket (M.Pong source)
     | _ -> ()
     async {return ()}
